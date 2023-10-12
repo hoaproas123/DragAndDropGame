@@ -3,6 +3,7 @@ package com.example.smid;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -10,20 +11,25 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Point;
+import android.graphics.drawable.ColorDrawable;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.util.Log;
 import android.view.DragEvent;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.RadioGroup;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.FileNotFoundException;
@@ -32,19 +38,22 @@ import java.util.Random;
 public class MainActivity extends AppCompatActivity {
     protected ImageView img,img1,img2,img3,img4,img5,img6,img7,img8,img9,
             img_recyle,imgZoomOut,imgZoomIn,thief_img;
+    protected TextView tv_score;
     protected EditText time_CounDown;
     protected RadioGroup rdoG_mode;
-    protected Button button_Add;
-    protected MediaPlayer player;
+    protected Button btn_Add;
+    protected MediaPlayer player,player_winner;
     protected CountDownTimer timer;
     protected RelativeLayout relativeLayout;
     protected View.DragShadowBuilder shadowBuilder;
-    protected int countTurn,img_location=0,thief_location=-1;
+    protected Dialog dialog;
+    protected int score,countTurn,img_location=0,thief_location=-1;
     protected float locationDefaultX,locationDefaultY,scaleX,scaleY;
     //Khởi tạo các biến của UI
     protected void InitUI(){
         //FindID
         relativeLayout = findViewById(R.id.container);
+        tv_score=(TextView)findViewById(R.id.textView_scores);
         time_CounDown = (EditText) findViewById(R.id.editText_timeCountDown);
         img=(ImageView) findViewById(R.id.imageViewMain);
         img1=(ImageView)findViewById(R.id.imageView1);
@@ -61,9 +70,11 @@ public class MainActivity extends AppCompatActivity {
         img_recyle=(ImageView) findViewById(R.id.imageViewRe);
         thief_img=(ImageView) findViewById(R.id.imageViewThief);
         rdoG_mode=(RadioGroup)findViewById(R.id.radioGroup_mode);
-        button_Add=(Button) findViewById(R.id.buttonAdd);
+        btn_Add=(Button) findViewById(R.id.buttonAdd);
         //Logic
         countTurn=0;
+        score=0;
+        tv_score.setText("Scores:           "+score);
         time_CounDown.setText(String.valueOf(SettingUI.timeCountdownDefault));
     }
     //Lấy hình ảnh từ file đã chọn sử dụng trong button_Add
@@ -83,15 +94,16 @@ public class MainActivity extends AppCompatActivity {
                 bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(uri));
                 // Hiển thị tệp ảnh
                 img.setImageBitmap(bitmap);
+                img.setVisibility(View.VISIBLE);
                 //Thông báo kết quả
-                if(button_Add.getText().equals("Update"))
+                if(btn_Add.getText().equals("Update"))
                 {
                     Toast.makeText(this, "Update Success", Toast.LENGTH_SHORT).show();
                 }
                 else{
                     Toast.makeText(this, "Add Success", Toast.LENGTH_SHORT).show();
                 }
-                button_Add.setText("Update");
+                btn_Add.setText("Update");
             } catch (FileNotFoundException e) {
                 throw new RuntimeException(e);
             }
@@ -115,10 +127,6 @@ public class MainActivity extends AppCompatActivity {
                         locationDefaultY=img.getY();
                         gamePlay();
                     }
-                    else if(countTurn==-1){
-                        timer.onFinish();
-                    }
-
                     countTurn++;//Lưu số lần chạm
                     //Khởi tạo Bóng và bắt đầu kéo
                     ClipData data = ClipData.newPlainText("" , "");
@@ -150,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
                         img.setVisibility(View.GONE);//Ẩn img
                         img.setScaleX(SettingUI.minScaleX);
                         img.setScaleY(SettingUI.minScaleY);
-                        countTurn=0;
+                        setUIDefault();
                         timer.cancel();
                         timer.onFinish();
                         //Thông báo đã xóa
@@ -175,25 +183,18 @@ public class MainActivity extends AppCompatActivity {
                 else if (event.getAction()==DragEvent.ACTION_DRAG_ENDED) {
                     if(winCheck())
                     {
-                        Log.d("TAG", "You Win");
-                        timer.cancel();
-                        countTurn=-1;
-                        if(player!=null)
-                        {
-                            player.release();
-                            player=null;
-                        }
-                        player = MediaPlayer.create(getApplication(),R.raw.win);
-                        player.start();
+                        score++;
+                        tv_score.setText("Scores:           "+score);
+                        player_winner = MediaPlayer.create(getApplication(),R.raw.win);
+                        player_winner.start();
                     }
-
                     Log.d("msg" , "Action is DragEvent.ACTION_DRAG_ENDED");
                     return true;
                 }
                 return false;
             }
         });
-        button_Add.setOnClickListener(new View.OnClickListener() {
+        btn_Add.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 // Khởi tạo một đối tượng Intent mới với loại ACTION_GET_CONTENT
@@ -202,9 +203,7 @@ public class MainActivity extends AppCompatActivity {
                 if(img.getVisibility()==View.GONE){
                     img.setX(locationDefaultX);
                     img.setY(locationDefaultY);
-                    img.setVisibility(View.VISIBLE);
                 }
-
                 // Đặt các thuộc tính MIME_TYPE và EXTRA_ALLOW_MULTIPLE của đối tượng Intent
                 intent.setType("image/*");
                 intent.setAction(Intent.ACTION_GET_CONTENT);
@@ -228,27 +227,8 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onFinish() {
                     time_CounDown.setText(String.valueOf(SettingUI.timeCountdownDefault));
-                    if(winCheck()==false)
-                    {
-                        Log.d("TAG", "You Lose");
-                        timer.cancel();
-                        countTurn=-1;
-                        if(player!=null)
-                        {
-                            player.release();
-                            player=null;
-                        }
-                        player = MediaPlayer.create(getApplication(),R.raw.lose);
-                        player.start();
-                        //Gán winCheck về = true
-                        thief_location=0;
-                        img_location=0;
-                        winCheck();
-                        thief_img.setVisibility(View.VISIBLE);
-                    }
-                    else {
-                        setUIDefault();
-                    }
+                    openResultdialog(score);
+                    setUIDefault();
                 }
             };
             timer.start();
@@ -269,16 +249,53 @@ public class MainActivity extends AppCompatActivity {
     protected void setUIDefault() {
         img.setX(locationDefaultX);
         img.setY(locationDefaultY);
-        button_Add.setText("Add");
+        btn_Add.setText("Add");
         //Reset setting default của img
         if(player!=null)
         {
             player.release();
             player=null;
         }
+        score=0;
+        tv_score.setText("Scores:           "+score);
         img_location=0;
+        countTurn=0;
         thief_location=-1;
         thief_img.setVisibility(View.GONE);
+    }
+    protected void openResultdialog(int scores)
+    {
+        dialog=new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.layout_dialog_result);
+        Window window=dialog.getWindow();
+        if(window==null){
+            return;
+        }
+        window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.WRAP_CONTENT);
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        WindowManager.LayoutParams windowAttributes = window.getAttributes();
+        windowAttributes.gravity= Gravity.CENTER;
+        window.setAttributes(windowAttributes);
+        dialog.setCancelable(false);
+        TextView tv_totalScore =dialog.findViewById(R.id.textView_total);
+        Button btn_Again =dialog.findViewById(R.id.button_playAgain);
+        Button btn_result =dialog.findViewById(R.id.button_viewResult);
+        btn_Again.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+            }
+        });
+        btn_result.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                //Hien Thi database
+            }
+        });
+        tv_totalScore.setText(String.valueOf(scores));
+        dialog.show();
+
     }
     //Cài đặt hiệu ứng cho con trỏ chuột
     protected void setBackGround(DragEvent event){
